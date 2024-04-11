@@ -1,20 +1,21 @@
 package main
 
-(
-import "io"
-import "net/http"
-import "unmarshal"
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 )
 
-type User struct{
-	ID int `json:"id"`
+type User struct {
+	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
 func main() {
-	response, err := http.Get("http://localhost:8080/users")
+	resp, err := http.Get("http://localhost:8080/users")
 	if err != nil {
-			fmt.Println(err.Error())
+		fmt.Println(err.Error())
 		return
 	}
 
@@ -26,10 +27,10 @@ func main() {
 
 	var response []User
 	err = json.Unmarshal(body, &response)
-	if err != nil (
-			fmt.Println("Erro ao recuperar dados", err.Error())
-		return 
-	)
+	if err != nil {
+		fmt.Println("Erro ao recuperar dados")
+		return
+	}
 
 	fmt.Println(response)
 }
