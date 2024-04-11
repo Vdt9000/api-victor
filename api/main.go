@@ -1,12 +1,10 @@
-package main
-
-
-import (
+import ("main.go"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	
+	"package"
+
 )
 
 func main() {
@@ -17,16 +15,25 @@ func main() {
 }
 
 type User struct{
-	ID int 
-	Name string 
+	ID int `json:"id"`
+	Name string `json:"name"`
 }
 
 
 func getUsers (w http.ResponseWriter, r *http.Request) {
-w.Header().Set("Content=Type", "application/json")
-json.NewEncoder(w).Encode([]User{{
-	ID:1,
-	Name: "Victor",
 	
+if r.Method ≠ "POST"{
+	http.error(w, http.StausText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+}
+w.Header().Set("Content=Type", "application/json")
+json.NewEncoder(w).Encode([]User{
+	{
+	ID:1,
+	Name: "Rafael",
+},
+
+{
+	ID: 2,
+	Name: "Pipoca",
 }})
 }
