@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
 	"strconv"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 type User struct {
@@ -14,32 +16,62 @@ type User struct {
 	Nascimento string `json:"date_of_birth"`
 }
 
-var users = []User{
-	{ID: 1, Name: "Victor", Nascimento: "18-09-2004"},
-	{ID: 2, Name: "Nick", Nascimento: "20-01-2000"},
-	{ID: 3, Name: "Vitinho", Nascimento: "30-03-1999"},
-	{ID: 4, Name: "Vini", Nascimento: "25-07-1995"},
-	{ID: 5, Name: "Luan", Nascimento: "25-07-1995"},
-}
+var users []User
 
 func main() {
-	http.HandleFunc("/users", listUsers)
-	http.HandleFunc("/users/create", createUser)
-	http.HandleFunc("/users/edit", editUser)
-	http.HandleFunc("/users/delete", deleteUser)
+	router := httprouter.New()
+	router.GET("/users", listUsers)
+	router.POST("/users/create", createUser)
+	router.DELETE("/users/delete/:id", deleteUser)
+	router.PUT("/users/edit/:id", editUser)
+	http.ListenAndServe(":8080", router)
 
-	fmt.Println("API is running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	//http.HandleFunc("/users", listUsers)
+	//http.HandleFunc("/users/create", createUser)
+	//http.HandleFunc("/users/edit/:id", editUser)
+	//http.HandleFunc("/users/delete/:id", deleteUser)
+
+	//fmt.Println("API is running on :8080")
+	//log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func listUsers(w http.ResponseWriter, r *http.Request) {
+func readUsers(id int) ([]User, error) {
+	var users []User
+	file, err := os.ReadFile("file.json")
+	if err != nil {
+		return users, err
+	}
+
+	err = json.Unmarshal(file, &users)
+	if err != nil {
+		return users, err
+	}
+
+	fmt.Print(id)
+
+	return users, nil
+
+}
+
+func listUsers(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	users, err := readUsers(10)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
 
-func createUser(w http.ResponseWriter, r *http.Request) {
+func createUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var newUser User
 	err := json.NewDecoder(r.Body).Decode(&newUser)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	users, err := readUsers(1)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -49,69 +81,111 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 
 	users = append(users, newUser)
 
+	err = WriteUsers(users)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	w.WriteHeader(http.StatusCreated)
 }
 
-func editUser(w http.ResponseWriter, r *http.Request) {
-	// Implementar edição de usuário aqui
-	id := r.URL.Query().Get("id")
+func editUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+
+	id := ps.ByName("id")
 	if id == "" {
 		http.Error(w, "ID do usuário não fornecido", http.StatusBadRequest)
 		return
 	}
 
-	// 2. Pesquisar o usuário na lista de usuários pelo ID
 	userID, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "ID informado é diferente do esperado", http.StatusBadRequest)
+		return
+	}
+	users, err := readUsers(1)
 	if err != nil {
 		http.Error(w, "ID do usuário inválido", http.StatusBadRequest)
 		return
 	}
 
 	var updateUser User
+
 	err = json.NewDecoder(r.Body).Decode(&updateUser)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// 3. Atualizar os campos do usuário encontrado com os novos dados
+	// 3. Atualiza os campos do usuário encontrado com os novos dados
+
 	for i, user := range users {
 		if user.ID == userID {
-			users[i] = updateUser
+			users[i].Name = updateUser.Name
+			users[i].Nascimento = updateUser.Nascimento
+			err = WriteUsers(users)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			json.NewEncoder(w).Encode(users[i])
 			return
 		}
 	}
 
-	// 4. Retornar erro se o usuário não for encontrado
+	// 4. Retorna erro se o usuário não for encontrado
 	http.Error(w, "Usuário não encontrado", http.StatusNotFound)
 }
 
-func deleteUser(w http.ResponseWriter, r *http.Request) {
-	// Implementar exclusão de usuário aqui
-	// 1. Extrair o ID do usuário a ser excluído da URL
-	id := r.URL.Query().Get("id")
+func deleteUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	// Implementa exclusão de usuário aqui
+	id := ps.ByName("id")
 	if id == "" {
 		http.Error(w, "ID do usuário não fornecido", http.StatusBadRequest)
 		return
 	}
-
-	// 2. Pesquisar o usuário na lista de usuários pelo ID
+	// 2. Pesquisa o usuário na lista de usuários pelo ID
 	userID, err := strconv.Atoi(id)
 	if err != nil {
 		http.Error(w, "ID do usuário inválido", http.StatusBadRequest)
 		return
 	}
 
-	// 3. Remover o usuário da lista de usuários, se encontrado
+	users, err := readUsers(1)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	for i, user := range users {
 		if user.ID == userID {
 			users = append(users[:i], users[i+1:]...)
+			err = WriteUsers(users)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 	}
 
-	// 4. Retornar erro se o usuário não for encontrado
+	// 4. Retorna erro se o usuário não for encontrado
 	http.Error(w, "Usuário não encontrado", http.StatusNotFound)
+}
+
+func WriteUsers(users []User) error {
+	jsonUser, err := json.Marshal(users)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile("file.json", jsonUser, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
